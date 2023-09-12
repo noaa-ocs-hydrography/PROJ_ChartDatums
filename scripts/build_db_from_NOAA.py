@@ -791,7 +791,7 @@ def create_insert_statements_from_json(json_path, proj_db_path, output_path=None
 
 if __name__ == "__main__":
     shutil.copyfile("proj.db", "datum_files/proj.db")
-    pdb = create_insert_statements_from_json("VDatum_Repo_Register.json", "datum_files/proj.db", 'noaa_inserts.sql')
+    pdb = create_insert_statements_from_json("NOAA_Register.json", "datum_files/proj.db", 'noaa_inserts.sql')
 
 
 # projinfo -t EPSG:6318+EPSG:5703 -s EPSG:6319 --spatial-test intersects
