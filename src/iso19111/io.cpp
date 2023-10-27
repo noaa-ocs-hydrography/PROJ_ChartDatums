@@ -1479,6 +1479,9 @@ struct WKTParser::Private {
 
     TransformationNNPtr buildCoordinateOperation(const WKTNodeNNPtr &node);
 
+    PointMotionOperationNNPtr
+    buildPointMotionOperation(const WKTNodeNNPtr &node);
+
     ConcatenatedOperationNNPtr
     buildConcatenatedOperation(const WKTNodeNNPtr &node);
 
@@ -2773,7 +2776,7 @@ WKTParser::Private::buildCS(const WKTNodeNNPtr &node, /* maybe null */
         const char *csTypeCStr = "";
         const auto &parentNodeName = parentNode->GP()->value();
         if (ci_equal(parentNodeName, WKTConstants::GEOCCS)) {
-            csTypeCStr = "Cartesian";
+            csTypeCStr = CartesianCS::WKT2_TYPE;
             isGeocentric = true;
             if (axisCount == 0) {
                 auto unit =
@@ -2784,7 +2787,7 @@ WKTParser::Private::buildCS(const WKTNodeNNPtr &node, /* maybe null */
                 return CartesianCS::createGeocentric(unit);
             }
         } else if (ci_equal(parentNodeName, WKTConstants::GEOGCS)) {
-            csTypeCStr = "Ellipsoidal";
+            csTypeCStr = EllipsoidalCS::WKT2_TYPE;
             if (axisCount == 0) {
                 // Missing axis with GEOGCS ? Presumably Long/Lat order
                 // implied
@@ -2809,7 +2812,7 @@ WKTParser::Private::buildCS(const WKTNodeNNPtr &node, /* maybe null */
             }
         } else if (ci_equal(parentNodeName, WKTConstants::BASEGEODCRS) ||
                    ci_equal(parentNodeName, WKTConstants::BASEGEOGCRS)) {
-            csTypeCStr = "Ellipsoidal";
+            csTypeCStr = EllipsoidalCS::WKT2_TYPE;
             if (axisCount == 0) {
                 auto unit = buildUnitInSubNode(parentNode,
                                                UnitOfMeasure::Type::ANGULAR);
@@ -2822,7 +2825,7 @@ WKTParser::Private::buildCS(const WKTNodeNNPtr &node, /* maybe null */
         } else if (ci_equal(parentNodeName, WKTConstants::PROJCS) ||
                    ci_equal(parentNodeName, WKTConstants::BASEPROJCRS) ||
                    ci_equal(parentNodeName, WKTConstants::BASEENGCRS)) {
-            csTypeCStr = "Cartesian";
+            csTypeCStr = CartesianCS::WKT2_TYPE;
             if (axisCount == 0) {
                 auto unit =
                     buildUnitInSubNode(parentNode, UnitOfMeasure::Type::LINEAR);
@@ -2838,7 +2841,7 @@ WKTParser::Private::buildCS(const WKTNodeNNPtr &node, /* maybe null */
         } else if (ci_equal(parentNodeName, WKTConstants::VERT_CS) ||
                    ci_equal(parentNodeName, WKTConstants::VERTCS) ||
                    ci_equal(parentNodeName, WKTConstants::BASEVERTCRS)) {
-            csTypeCStr = "vertical";
+            csTypeCStr = VerticalCS::WKT2_TYPE;
 
             bool downDirection = false;
             if (ci_equal(parentNodeName, WKTConstants::VERTCS)) // ESRI
@@ -2898,15 +2901,15 @@ WKTParser::Private::buildCS(const WKTNodeNNPtr &node, /* maybe null */
                 }
                 return CartesianCS::createEastingNorthing(unit);
             } else if (axisCount == 1) {
-                csTypeCStr = "vertical";
-            } else if (axisCount == 2) {
-                csTypeCStr = "Cartesian";
+                csTypeCStr = VerticalCS::WKT2_TYPE;
+            } else if (axisCount == 2 || axisCount == 3) {
+                csTypeCStr = CartesianCS::WKT2_TYPE;
             } else {
                 throw ParsingException(
                     "buildCS: unexpected AXIS count for LOCAL_CS");
             }
         } else if (ci_equal(parentNodeName, WKTConstants::BASEPARAMCRS)) {
-            csTypeCStr = "parametric";
+            csTypeCStr = ParametricCS::WKT2_TYPE;
             if (axisCount == 0) {
                 auto unit =
                     buildUnitInSubNode(parentNode, UnitOfMeasure::Type::LINEAR);
@@ -2922,7 +2925,7 @@ WKTParser::Private::buildCS(const WKTNodeNNPtr &node, /* maybe null */
                         std::string(), AxisDirection::UNSPECIFIED, unit));
             }
         } else if (ci_equal(parentNodeName, WKTConstants::BASETIMECRS)) {
-            csTypeCStr = "temporal";
+            csTypeCStr = TemporalCS::WKT2_2015_TYPE;
             if (axisCount == 0) {
                 auto unit =
                     buildUnitInSubNode(parentNode, UnitOfMeasure::Type::TIME);
@@ -2954,16 +2957,19 @@ WKTParser::Private::buildCS(const WKTNodeNNPtr &node, /* maybe null */
     }
 
     const auto unitType =
-        ci_equal(csType, "ellipsoidal")  ? UnitOfMeasure::Type::ANGULAR
-        : ci_equal(csType, "ordinal")    ? UnitOfMeasure::Type::NONE
-        : ci_equal(csType, "parametric") ? UnitOfMeasure::Type::PARAMETRIC
-        : ci_equal(csType, "Cartesian") || ci_equal(csType, "vertical") ||
-                ci_equal(csType, "affine")
+        ci_equal(csType, EllipsoidalCS::WKT2_TYPE)
+            ? UnitOfMeasure::Type::ANGULAR
+        : ci_equal(csType, OrdinalCS::WKT2_TYPE) ? UnitOfMeasure::Type::NONE
+        : ci_equal(csType, ParametricCS::WKT2_TYPE)
+            ? UnitOfMeasure::Type::PARAMETRIC
+        : ci_equal(csType, CartesianCS::WKT2_TYPE) ||
+                ci_equal(csType, VerticalCS::WKT2_TYPE) ||
+                ci_equal(csType, AffineCS::WKT2_TYPE)
             ? UnitOfMeasure::Type::LINEAR
-        : (ci_equal(csType, "temporal") ||
-           ci_equal(csType, "TemporalDateTime") ||
-           ci_equal(csType, "TemporalCount") ||
-           ci_equal(csType, "TemporalMeasure"))
+        : (ci_equal(csType, TemporalCS::WKT2_2015_TYPE) ||
+           ci_equal(csType, DateTimeTemporalCS::WKT2_2019_TYPE) ||
+           ci_equal(csType, TemporalCountCS::WKT2_2019_TYPE) ||
+           ci_equal(csType, TemporalMeasureCS::WKT2_2019_TYPE))
             ? UnitOfMeasure::Type::TIME
             : UnitOfMeasure::Type::UNKNOWN;
     UnitOfMeasure unit = buildUnitInSubNode(parentNode, unitType);
@@ -2976,32 +2982,32 @@ WKTParser::Private::buildCS(const WKTNodeNNPtr &node, /* maybe null */
     }
 
     const PropertyMap &csMap = emptyPropertyMap;
-    if (ci_equal(csType, "ellipsoidal")) {
+    if (ci_equal(csType, EllipsoidalCS::WKT2_TYPE)) {
         if (axisCount == 2) {
             return EllipsoidalCS::create(csMap, axisList[0], axisList[1]);
         } else if (axisCount == 3) {
             return EllipsoidalCS::create(csMap, axisList[0], axisList[1],
                                          axisList[2]);
         }
-    } else if (ci_equal(csType, "Cartesian")) {
+    } else if (ci_equal(csType, CartesianCS::WKT2_TYPE)) {
         if (axisCount == 2) {
             return CartesianCS::create(csMap, axisList[0], axisList[1]);
         } else if (axisCount == 3) {
             return CartesianCS::create(csMap, axisList[0], axisList[1],
                                        axisList[2]);
         }
-    } else if (ci_equal(csType, "affine")) {
+    } else if (ci_equal(csType, AffineCS::WKT2_TYPE)) {
         if (axisCount == 2) {
             return AffineCS::create(csMap, axisList[0], axisList[1]);
         } else if (axisCount == 3) {
             return AffineCS::create(csMap, axisList[0], axisList[1],
                                     axisList[2]);
         }
-    } else if (ci_equal(csType, "vertical")) {
+    } else if (ci_equal(csType, VerticalCS::WKT2_TYPE)) {
         if (axisCount == 1) {
             return VerticalCS::create(csMap, axisList[0]);
         }
-    } else if (ci_equal(csType, "spherical")) {
+    } else if (ci_equal(csType, SphericalCS::WKT2_TYPE)) {
         if (axisCount == 2) {
             // Extension to ISO19111 to support (planet)-ocentric CS with
             // geocentric latitude
@@ -3010,13 +3016,13 @@ WKTParser::Private::buildCS(const WKTNodeNNPtr &node, /* maybe null */
             return SphericalCS::create(csMap, axisList[0], axisList[1],
                                        axisList[2]);
         }
-    } else if (ci_equal(csType, "ordinal")) { // WKT2-2019
+    } else if (ci_equal(csType, OrdinalCS::WKT2_TYPE)) { // WKT2-2019
         return OrdinalCS::create(csMap, axisList);
-    } else if (ci_equal(csType, "parametric")) {
+    } else if (ci_equal(csType, ParametricCS::WKT2_TYPE)) {
         if (axisCount == 1) {
             return ParametricCS::create(csMap, axisList[0]);
         }
-    } else if (ci_equal(csType, "temporal")) { // WKT2-2015
+    } else if (ci_equal(csType, TemporalCS::WKT2_2015_TYPE)) {
         if (axisCount == 1) {
             if (isNull(
                     parentNode->GP()->lookForChild(WKTConstants::TIMEUNIT)) &&
@@ -3028,15 +3034,15 @@ WKTParser::Private::buildCS(const WKTNodeNNPtr &node, /* maybe null */
                 return TemporalMeasureCS::create(csMap, axisList[0]);
             }
         }
-    } else if (ci_equal(csType, "TemporalDateTime")) { // WKT2-2019
+    } else if (ci_equal(csType, DateTimeTemporalCS::WKT2_2019_TYPE)) {
         if (axisCount == 1) {
             return DateTimeTemporalCS::create(csMap, axisList[0]);
         }
-    } else if (ci_equal(csType, "TemporalCount")) { // WKT2-2019
+    } else if (ci_equal(csType, TemporalCountCS::WKT2_2019_TYPE)) {
         if (axisCount == 1) {
             return TemporalCountCS::create(csMap, axisList[0]);
         }
-    } else if (ci_equal(csType, "TemporalMeasure")) { // WKT2-2019
+    } else if (ci_equal(csType, TemporalMeasureCS::WKT2_2019_TYPE)) {
         if (axisCount == 1) {
             return TemporalMeasureCS::create(csMap, axisList[0]);
         }
@@ -3618,6 +3624,47 @@ WKTParser::Private::buildCoordinateOperation(const WKTNodeNNPtr &node) {
                                   NN_NO_CHECK(targetCRS), interpolationCRS,
                                   buildProperties(methodNode), parameters,
                                   values, accuracies);
+}
+
+// ---------------------------------------------------------------------------
+
+PointMotionOperationNNPtr
+WKTParser::Private::buildPointMotionOperation(const WKTNodeNNPtr &node) {
+    const auto *nodeP = node->GP();
+    auto &methodNode = nodeP->lookForChild(WKTConstants::METHOD);
+    if (isNull(methodNode)) {
+        ThrowMissing(WKTConstants::METHOD);
+    }
+    if (methodNode->GP()->childrenSize() == 0) {
+        ThrowNotEnoughChildren(WKTConstants::METHOD);
+    }
+
+    auto &sourceCRSNode = nodeP->lookForChild(WKTConstants::SOURCECRS);
+    if (sourceCRSNode->GP()->childrenSize() != 1) {
+        ThrowMissing(WKTConstants::SOURCECRS);
+    }
+    auto sourceCRS = buildCRS(sourceCRSNode->GP()->children()[0]);
+    if (!sourceCRS) {
+        throw ParsingException("Invalid content in SOURCECRS node");
+    }
+
+    std::vector<OperationParameterNNPtr> parameters;
+    std::vector<ParameterValueNNPtr> values;
+    auto defaultLinearUnit = UnitOfMeasure::NONE;
+    auto defaultAngularUnit = UnitOfMeasure::NONE;
+    consumeParameters(node, false, parameters, values, defaultLinearUnit,
+                      defaultAngularUnit);
+
+    std::vector<PositionalAccuracyNNPtr> accuracies;
+    auto &accuracyNode = nodeP->lookForChild(WKTConstants::OPERATIONACCURACY);
+    if (/*!isNull(accuracyNode) && */ accuracyNode->GP()->childrenSize() == 1) {
+        accuracies.push_back(PositionalAccuracy::create(
+            stripQuotes(accuracyNode->GP()->children()[0])));
+    }
+
+    return PointMotionOperation::create(
+        buildProperties(node), NN_NO_CHECK(sourceCRS),
+        buildProperties(methodNode), parameters, values, accuracies);
 }
 
 // ---------------------------------------------------------------------------
@@ -4545,7 +4592,7 @@ WKTParser::Private::buildProjectedCRS(const WKTNodeNNPtr &node) {
         }
     }
     if (!cartesianCS) {
-        ThrowNotExpectedCSType("Cartesian");
+        ThrowNotExpectedCSType(CartesianCS::WKT2_TYPE);
     }
 
     if (cartesianCS->axisList().size() == 3 &&
@@ -4798,7 +4845,7 @@ CRSNNPtr WKTParser::Private::buildVerticalCRS(const WKTNodeNNPtr &node) {
     auto verticalCS = nn_dynamic_pointer_cast<VerticalCS>(
         buildCS(csNode, node, UnitOfMeasure::NONE));
     if (!verticalCS) {
-        ThrowNotExpectedCSType("vertical");
+        ThrowNotExpectedCSType(VerticalCS::WKT2_TYPE);
     }
 
     if (vdatum && vdatum->getWKT1DatumType() == "2002" &&
@@ -5135,7 +5182,7 @@ WKTParser::Private::buildTemporalCS(const WKTNodeNNPtr &parentNode) {
     auto cs = buildCS(csNode, parentNode, UnitOfMeasure::NONE);
     auto temporalCS = nn_dynamic_pointer_cast<TemporalCS>(cs);
     if (!temporalCS) {
-        ThrowNotExpectedCSType("temporal");
+        ThrowNotExpectedCSType(TemporalCS::WKT2_2015_TYPE);
     }
     return NN_NO_CHECK(temporalCS);
 }
@@ -5260,7 +5307,7 @@ WKTParser::Private::buildParametricCS(const WKTNodeNNPtr &parentNode) {
     auto cs = buildCS(csNode, parentNode, UnitOfMeasure::NONE);
     auto parametricCS = nn_dynamic_pointer_cast<ParametricCS>(cs);
     if (!parametricCS) {
-        ThrowNotExpectedCSType("parametric");
+        ThrowNotExpectedCSType(ParametricCS::WKT2_TYPE);
     }
     return NN_NO_CHECK(parametricCS);
 }
@@ -5363,13 +5410,14 @@ WKTParser::Private::buildCoordinateMetadata(const WKTNodeNNPtr &node) {
         if (epochChildren.empty()) {
             ThrowMissing(WKTConstants::EPOCH);
         }
+        double coordinateEpoch;
         try {
-            const double coordinateEpoch = asDouble(epochChildren[0]);
-            return CoordinateMetadata::create(NN_NO_CHECK(crs),
-                                              coordinateEpoch);
+            coordinateEpoch = asDouble(epochChildren[0]);
         } catch (const std::exception &) {
             throw ParsingException("Invalid EPOCH node");
         }
+        return CoordinateMetadata::create(NN_NO_CHECK(crs), coordinateEpoch,
+                                          dbContext_);
     }
 
     return CoordinateMetadata::create(NN_NO_CHECK(crs));
@@ -5601,6 +5649,11 @@ BaseObjectNNPtr WKTParser::Private::build(const WKTNodeNNPtr &node) {
             buildConcatenatedOperation(node));
     }
 
+    if (ci_equal(name, WKTConstants::POINTMOTIONOPERATION)) {
+        return util::nn_static_pointer_cast<BaseObject>(
+            buildPointMotionOperation(node));
+    }
+
     if (ci_equal(name, WKTConstants::ID) ||
         ci_equal(name, WKTConstants::AUTHORITY)) {
         return util::nn_static_pointer_cast<BaseObject>(
@@ -5658,6 +5711,7 @@ class JSONParser {
     CompoundCRSNNPtr buildCompoundCRS(const json &j);
     BoundCRSNNPtr buildBoundCRS(const json &j);
     TransformationNNPtr buildTransformation(const json &j);
+    PointMotionOperationNNPtr buildPointMotionOperation(const json &j);
     ConcatenatedOperationNNPtr buildConcatenatedOperation(const json &j);
     CoordinateMetadataNNPtr buildCoordinateMetadata(const json &j);
 
@@ -6217,6 +6271,9 @@ BaseObjectNNPtr JSONParser::create(const json &j)
     if (type == "Transformation") {
         return buildTransformation(j);
     }
+    if (type == "PointMotionOperation") {
+        return buildPointMotionOperation(j);
+    }
     if (type == "ConcatenatedOperation") {
         return buildConcatenatedOperation(j);
     }
@@ -6581,6 +6638,43 @@ TransformationNNPtr JSONParser::buildTransformation(const json &j) {
 
 // ---------------------------------------------------------------------------
 
+PointMotionOperationNNPtr JSONParser::buildPointMotionOperation(const json &j) {
+
+    auto sourceCRS = buildCRS(getObject(j, "source_crs"));
+    auto methodJ = getObject(j, "method");
+    auto parametersJ = getArray(j, "parameters");
+    std::vector<OperationParameterNNPtr> parameters;
+    std::vector<ParameterValueNNPtr> values;
+    for (const auto &param : parametersJ) {
+        if (!param.is_object()) {
+            throw ParsingException(
+                "Unexpected type for a \"parameters\" child");
+        }
+        parameters.emplace_back(
+            OperationParameter::create(buildProperties(param)));
+        if (param.contains("value")) {
+            auto v = param["value"];
+            if (v.is_string()) {
+                values.emplace_back(
+                    ParameterValue::createFilename(v.get<std::string>()));
+                continue;
+            }
+        }
+        values.emplace_back(ParameterValue::create(getMeasure(param)));
+    }
+    std::vector<PositionalAccuracyNNPtr> accuracies;
+    if (j.contains("accuracy")) {
+        accuracies.push_back(
+            PositionalAccuracy::create(getString(j, "accuracy")));
+    }
+
+    return PointMotionOperation::create(buildProperties(j), sourceCRS,
+                                        buildProperties(methodJ), parameters,
+                                        values, accuracies);
+}
+
+// ---------------------------------------------------------------------------
+
 ConcatenatedOperationNNPtr
 JSONParser::buildConcatenatedOperation(const json &j) {
 
@@ -6625,8 +6719,8 @@ CoordinateMetadataNNPtr JSONParser::buildCoordinateMetadata(const json &j) {
     if (j.contains("coordinateEpoch")) {
         auto jCoordinateEpoch = j["coordinateEpoch"];
         if (jCoordinateEpoch.is_number()) {
-            return CoordinateMetadata::create(crs,
-                                              jCoordinateEpoch.get<double>());
+            return CoordinateMetadata::create(
+                crs, jCoordinateEpoch.get<double>(), dbContext_);
         }
         throw ParsingException(
             "Unexpected type for value of \"coordinateEpoch\"");
@@ -6713,7 +6807,7 @@ CoordinateSystemNNPtr JSONParser::buildCS(const json &j) {
     }
     const PropertyMap &csMap = emptyPropertyMap;
     const auto axisCount = axisList.size();
-    if (subtype == "ellipsoidal") {
+    if (subtype == EllipsoidalCS::WKT2_TYPE) {
         if (axisCount == 2) {
             return EllipsoidalCS::create(csMap, axisList[0], axisList[1]);
         }
@@ -6723,7 +6817,7 @@ CoordinateSystemNNPtr JSONParser::buildCS(const json &j) {
         }
         throw ParsingException("Expected 2 or 3 axis");
     }
-    if (subtype == "Cartesian") {
+    if (subtype == CartesianCS::WKT2_TYPE) {
         if (axisCount == 2) {
             return CartesianCS::create(csMap, axisList[0], axisList[1]);
         }
@@ -6733,7 +6827,7 @@ CoordinateSystemNNPtr JSONParser::buildCS(const json &j) {
         }
         throw ParsingException("Expected 2 or 3 axis");
     }
-    if (subtype == "affine") {
+    if (subtype == AffineCS::WKT2_TYPE) {
         if (axisCount == 2) {
             return AffineCS::create(csMap, axisList[0], axisList[1]);
         }
@@ -6743,13 +6837,13 @@ CoordinateSystemNNPtr JSONParser::buildCS(const json &j) {
         }
         throw ParsingException("Expected 2 or 3 axis");
     }
-    if (subtype == "vertical") {
+    if (subtype == VerticalCS::WKT2_TYPE) {
         if (axisCount == 1) {
             return VerticalCS::create(csMap, axisList[0]);
         }
         throw ParsingException("Expected 1 axis");
     }
-    if (subtype == "spherical") {
+    if (subtype == SphericalCS::WKT2_TYPE) {
         if (axisCount == 2) {
             // Extension to ISO19111 to support (planet)-ocentric CS with
             // geocentric latitude
@@ -6760,28 +6854,28 @@ CoordinateSystemNNPtr JSONParser::buildCS(const json &j) {
         }
         throw ParsingException("Expected 2 or 3 axis");
     }
-    if (subtype == "ordinal") {
+    if (subtype == OrdinalCS::WKT2_TYPE) {
         return OrdinalCS::create(csMap, axisList);
     }
-    if (subtype == "parametric") {
+    if (subtype == ParametricCS::WKT2_TYPE) {
         if (axisCount == 1) {
             return ParametricCS::create(csMap, axisList[0]);
         }
         throw ParsingException("Expected 1 axis");
     }
-    if (subtype == "TemporalDateTime") {
+    if (subtype == DateTimeTemporalCS::WKT2_2019_TYPE) {
         if (axisCount == 1) {
             return DateTimeTemporalCS::create(csMap, axisList[0]);
         }
         throw ParsingException("Expected 1 axis");
     }
-    if (subtype == "TemporalCount") {
+    if (subtype == TemporalCountCS::WKT2_2019_TYPE) {
         if (axisCount == 1) {
             return TemporalCountCS::create(csMap, axisList[0]);
         }
         throw ParsingException("Expected 1 axis");
     }
-    if (subtype == "TemporalMeasure") {
+    if (subtype == TemporalMeasureCS::WKT2_2019_TYPE) {
         if (axisCount == 1) {
             return TemporalMeasureCS::create(csMap, axisList[0]);
         }
@@ -7209,6 +7303,10 @@ static BaseObjectNNPtr createFromURNPart(const DatabaseContextPtr &dbContext,
         if (type == "meridian") {
             return factory->createPrimeMeridian(code);
         }
+        // Extension of OGC URN syntax to CoordinateMetadata
+        if (type == "coordinateMetadata") {
+            return factory->createCoordinateMetadata(code);
+        }
         throw ParsingException(concat("unhandled object type: ", type));
     } catch (...) {
         if (version.empty()) {
@@ -7238,11 +7336,53 @@ static BaseObjectNNPtr createFromURNPart(const DatabaseContextPtr &dbContext,
 static BaseObjectNNPtr createFromUserInput(const std::string &text,
                                            const DatabaseContextPtr &dbContext,
                                            bool usePROJ4InitRules,
-                                           PJ_CONTEXT *ctx) {
+                                           PJ_CONTEXT *ctx,
+                                           bool ignoreCoordinateEpoch) {
     std::size_t idxFirstCharNotSpace = text.find_first_not_of(" \t\r\n");
     if (idxFirstCharNotSpace > 0 && idxFirstCharNotSpace != std::string::npos) {
         return createFromUserInput(text.substr(idxFirstCharNotSpace), dbContext,
-                                   usePROJ4InitRules, ctx);
+                                   usePROJ4InitRules, ctx,
+                                   ignoreCoordinateEpoch);
+    }
+
+    // Parse strings like "ITRF2014 @ 2025.0"
+    const auto posAt = text.find('@');
+    if (!ignoreCoordinateEpoch && posAt != std::string::npos) {
+
+        // Try first as if belonged to the name
+        try {
+            return createFromUserInput(text, dbContext, usePROJ4InitRules, ctx,
+                                       /* ignoreCoordinateEpoch = */ true);
+        } catch (...) {
+        }
+
+        std::string leftPart = text.substr(0, posAt);
+        while (!leftPart.empty() && leftPart.back() == ' ')
+            leftPart.resize(leftPart.size() - 1);
+        const auto nonSpacePos = text.find_first_not_of(' ', posAt + 1);
+        if (nonSpacePos != std::string::npos) {
+            auto obj =
+                createFromUserInput(leftPart, dbContext, usePROJ4InitRules, ctx,
+                                    /* ignoreCoordinateEpoch = */ true);
+            auto crs = nn_dynamic_pointer_cast<CRS>(obj);
+            if (crs) {
+                double epoch;
+                try {
+                    epoch = c_locale_stod(text.substr(nonSpacePos));
+                } catch (const std::exception &) {
+                    throw ParsingException("non-numeric value after @");
+                }
+                try {
+                    return CoordinateMetadata::create(NN_NO_CHECK(crs), epoch,
+                                                      dbContext);
+                } catch (const std::exception &e) {
+                    throw ParsingException(
+                        std::string(
+                            "CoordinateMetadata::create() failed with: ") +
+                        e.what());
+                }
+            }
+        }
     }
 
     if (!text.empty() && text[0] == '{') {
@@ -7771,36 +7911,6 @@ static BaseObjectNNPtr createFromUserInput(const std::string &text,
         }
     }
 
-    // Parse strings like "ITRF2014 @ 2025.0"
-    const auto posAt = text.find('@');
-    if (posAt != std::string::npos) {
-        std::string leftPart = text.substr(0, posAt);
-        while (!leftPart.empty() && leftPart.back() == ' ')
-            leftPart.resize(leftPart.size() - 1);
-        const auto nonSpacePos = text.find_first_not_of(' ', posAt + 1);
-        if (nonSpacePos != std::string::npos) {
-            auto obj = createFromUserInput(leftPart, dbContext,
-                                           usePROJ4InitRules, ctx);
-            auto crs = nn_dynamic_pointer_cast<CRS>(obj);
-            if (crs) {
-                double epoch;
-                try {
-                    epoch = c_locale_stod(text.substr(nonSpacePos));
-                } catch (const std::exception &) {
-                    throw ParsingException("non-numeric value after @");
-                }
-                try {
-                    return CoordinateMetadata::create(NN_NO_CHECK(crs), epoch);
-                } catch (const std::exception &e) {
-                    throw ParsingException(
-                        std::string(
-                            "CoordinateMetadata::create() failed with: ") +
-                        e.what());
-                }
-            }
-        }
-    }
-
     throw ParsingException("unrecognized format / unknown name");
 }
 //! @endcond
@@ -7828,6 +7938,9 @@ static BaseObjectNNPtr createFromUserInput(const std::string &text,
  *      e.g. for Projected 3D CRS "UTM zone 31N / WGS 84 (3D)"
  *      "urn:ogc:def:crs,crs:EPSG::4979,cs:PROJ::ENh,coordinateOperation:EPSG::16031"
  * </li>
+ * <li>Extension of OGC URN for CoordinateMetadata.
+ *     e.g.
+ * "urn:ogc:def:coordinateMetadata:NRCAN::NAD83_CSRS_1997_MTM11_HT2_1997"</li>
  * <li> OGC URN combining references for concatenated operations
  *      e.g.
  * "urn:ogc:def:coordinateOperation,coordinateOperation:EPSG::3895,coordinateOperation:EPSG::1618"</li>
@@ -7861,7 +7974,8 @@ static BaseObjectNNPtr createFromUserInput(const std::string &text,
 BaseObjectNNPtr createFromUserInput(const std::string &text,
                                     const DatabaseContextPtr &dbContext,
                                     bool usePROJ4InitRules) {
-    return createFromUserInput(text, dbContext, usePROJ4InitRules, nullptr);
+    return createFromUserInput(text, dbContext, usePROJ4InitRules, nullptr,
+                               /* ignoreCoordinateEpoch = */ false);
 }
 
 // ---------------------------------------------------------------------------
@@ -7886,6 +8000,9 @@ BaseObjectNNPtr createFromUserInput(const std::string &text,
  *      e.g. for Projected 3D CRS "UTM zone 31N / WGS 84 (3D)"
  *      "urn:ogc:def:crs,crs:EPSG::4979,cs:PROJ::ENh,coordinateOperation:EPSG::16031"
  * </li>
+ * <li>Extension of OGC URN for CoordinateMetadata.
+ *     e.g.
+ * "urn:ogc:def:coordinateMetadata:NRCAN::NAD83_CSRS_1997_MTM11_HT2_1997"</li>
  * <li> OGC URN combining references for concatenated operations
  *      e.g.
  * "urn:ogc:def:coordinateOperation,coordinateOperation:EPSG::3895,coordinateOperation:EPSG::1618"</li>
@@ -7914,7 +8031,8 @@ BaseObjectNNPtr createFromUserInput(const std::string &text, PJ_CONTEXT *ctx) {
         }
     } catch (const std::exception &) {
     }
-    return createFromUserInput(text, dbContext, false, ctx);
+    return createFromUserInput(text, dbContext, false, ctx,
+                               /* ignoreCoordinateEpoch = */ false);
 }
 
 // ---------------------------------------------------------------------------
@@ -8075,7 +8193,8 @@ WKTParser::guessDialect(const std::string &inputWkt) noexcept {
         &WKTConstants::DYNAMIC, &WKTConstants::FRAMEEPOCH, &WKTConstants::MODEL,
         &WKTConstants::VELOCITYGRID, &WKTConstants::ENSEMBLE,
         &WKTConstants::DERIVEDPROJCRS, &WKTConstants::BASEPROJCRS,
-        &WKTConstants::GEOGRAPHICCRS, &WKTConstants::TRF, &WKTConstants::VRF};
+        &WKTConstants::GEOGRAPHICCRS, &WKTConstants::TRF, &WKTConstants::VRF,
+        &WKTConstants::POINTMOTIONOPERATION};
 
     for (const auto &pointerKeyword : wkt2_2019_only_keywords) {
         auto pos = ci_find(wkt, *pointerKeyword);
@@ -10181,6 +10300,12 @@ static bool isGeocentricStep(const std::string &name) {
 
 // ---------------------------------------------------------------------------
 
+static bool isTopocentricStep(const std::string &name) {
+    return name == "topocentric";
+}
+
+// ---------------------------------------------------------------------------
+
 static bool isProjectedStep(const std::string &name) {
     if (name == "etmerc" || name == "utm" ||
         !getMappingsFromPROJName(name).empty()) {
@@ -10857,7 +10982,7 @@ GeodeticCRSNNPtr
 PROJStringParser::Private::buildGeocentricCRS(int iStep, int iUnitConvert) {
     auto &step = steps_[iStep];
 
-    assert(isGeocentricStep(step.name));
+    assert(isGeocentricStep(step.name) || isTopocentricStep(step.name));
     assert(iUnitConvert < 0 ||
            ci_equal(steps_[iUnitConvert].name, "unitconvert"));
 
@@ -11509,6 +11634,13 @@ PROJStringParser::Private::buildProjectedCRS(int iStep,
                   ? CartesianCS::create(emptyPropertyMap, axis[0], axis[1])
                   : CartesianCS::create(emptyPropertyMap, axis[0], axis[1],
                                         csGeodCRS->axisList()[2]);
+    if (isTopocentricStep(step.name)) {
+        cs = CartesianCS::create(
+            emptyPropertyMap,
+            createAxis("topocentric East", "U", AxisDirection::EAST, unit),
+            createAxis("topocentric North", "V", AxisDirection::NORTH, unit),
+            createAxis("topocentric Up", "W", AxisDirection::UP, unit));
+    }
 
     auto props = PropertyMap().set(IdentifiedObject::NAME_KEY,
                                    title.empty() ? "unknown" : title);
@@ -11614,6 +11746,10 @@ PROJStringParser::createFromPROJString(const std::string &projString) {
           d->getParamValue(d->steps_[0], "type") == "crs") ||
          (d->steps_.size() == 2 && d->steps_[1].name == "unitconvert")) &&
         !d->steps_[0].inverted && isGeocentricStep(d->steps_[0].name);
+
+    const bool isTopocentricCRS =
+        (d->steps_.size() == 1 && isTopocentricStep(d->steps_[0].name) &&
+         d->getParamValue(d->steps_[0], "type") == "crs");
 
     // +init=xxxx:yyyy syntax
     if (d->steps_.size() == 1 && d->steps_[0].isInit &&
@@ -12001,6 +12137,18 @@ PROJStringParser::createFromPROJString(const std::string &projString) {
                                              d->steps_[1].name == "unitconvert")
                                                 ? 1
                                                 : -1));
+            if (iter == 1) {
+                return nn_static_pointer_cast<BaseObject>(obj);
+            }
+        }
+    }
+
+    if (isTopocentricCRS) {
+        // First run is dry run to mark all recognized/unrecognized tokens
+        for (int iter = 0; iter < 2; iter++) {
+            auto obj = d->buildBoundOrCompoundCRSIfNeeded(
+                0,
+                d->buildProjectedCRS(0, d->buildGeocentricCRS(0, -1), -1, -1));
             if (iter == 1) {
                 return nn_static_pointer_cast<BaseObject>(obj);
             }

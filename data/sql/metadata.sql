@@ -7,10 +7,10 @@
 -- DATABASE_LAYOUT_VERSION_MINOR constants in src/iso19111/factory.cpp must be
 -- updated as well.
 INSERT INTO "metadata" VALUES('DATABASE.LAYOUT.VERSION.MAJOR', 1);
-INSERT INTO "metadata" VALUES('DATABASE.LAYOUT.VERSION.MINOR', 2);
+INSERT INTO "metadata" VALUES('DATABASE.LAYOUT.VERSION.MINOR', 3);
 
-INSERT INTO "metadata" VALUES('EPSG.VERSION', 'v10.094');
-INSERT INTO "metadata" VALUES('EPSG.DATE', '2023-08-08');
+INSERT INTO "metadata" VALUES('EPSG.VERSION', 'v10.096');
+INSERT INTO "metadata" VALUES('EPSG.DATE', '2023-09-30');
 
 -- The value of ${PROJ_VERSION} is substituted at build time by the actual
 -- value.
@@ -18,4 +18,4 @@ INSERT INTO "metadata" VALUES('PROJ.VERSION', '${PROJ_VERSION}');
 
 -- Version of the PROJ-data package with which this database is the most
 -- compatible.
-INSERT INTO "metadata" VALUES('PROJ_DATA.VERSION', '1.15');
+INSERT INTO "metadata" VALUES('PROJ_DATA.VERSION', '1.16');
