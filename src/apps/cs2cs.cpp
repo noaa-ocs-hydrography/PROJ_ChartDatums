@@ -229,19 +229,19 @@ static void process(FILE *fid)
                 data.u *= destToRadians * RAD_TO_DEG;
             }
             if (reverseout) {
-                printf(oform, data.v);
+                limited_fprintf_for_number(stdout, oform, data.v);
                 putchar('\t');
-                printf(oform, data.u);
+                limited_fprintf_for_number(stdout, oform, data.u);
             } else {
-                printf(oform, data.u);
+                limited_fprintf_for_number(stdout, oform, data.u);
                 putchar('\t');
-                printf(oform, data.v);
+                limited_fprintf_for_number(stdout, oform, data.v);
             }
         }
 
         putchar(' ');
         if (oform != nullptr)
-            printf(oform, z);
+            limited_fprintf_for_number(stdout, oform, z);
         else
             printf("%.3f", z);
         if (s)
@@ -580,8 +580,10 @@ int main(int argc, char **argv) {
                         }
                         proj_unit_list_destroy(units);
                     } else if (arg[1] == 'm') { /* list prime meridians */
+                        (void)fprintf(stderr,
+                            "This list is no longer updated, and some values may "
+                            "conflict with other sources.\n");
                         const struct PJ_PRIME_MERIDIANS *lpm;
-
                         for (lpm = proj_list_prime_meridians(); lpm->id; ++lpm)
                             (void)printf("%12s %-30s\n", lpm->id, lpm->defn);
                     } else
@@ -899,7 +901,7 @@ int main(int argc, char **argv) {
             sourceEpochDbl = c_locale_stod(sourceEpoch);
         } catch (const std::exception &e) {
             sourceEpochDbl = 0;
-            emess(3, e.what());
+            emess(3, "%s", e.what());
         }
         srcMetadata =
             proj_coordinate_metadata_create(nullptr, src, sourceEpochDbl);
@@ -917,7 +919,7 @@ int main(int argc, char **argv) {
             targetEpochDbl = c_locale_stod(targetEpoch);
         } catch (const std::exception &e) {
             targetEpochDbl = 0;
-            emess(3, e.what());
+            emess(3, "%s", e.what());
         }
         dstMetadata =
             proj_coordinate_metadata_create(nullptr, dst, targetEpochDbl);
@@ -994,7 +996,7 @@ int main(int argc, char **argv) {
 
         } else {
             if ((fid = fopen(*eargv, "rt")) == nullptr) {
-                emess(-2, *eargv, "input file");
+                emess(-2, "input file: %s", *eargv);
                 continue;
             }
             emess_dat.File_name = *eargv;

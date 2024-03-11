@@ -526,6 +526,11 @@ map_geogcs_esri_name_to_auth_code = {}
 
 
 def import_geogcs():
+
+    # Those 2 maps are used to fill the deprecation table
+    map_code_to_authority = {}
+    mapDeprecatedToNonDeprecated = {}
+
     with open(path_to_csv / 'pe_list_geogcs.csv', 'rt') as csvfile:
         reader = csv.reader(csvfile)
         header = next(reader)
@@ -569,12 +574,15 @@ def import_geogcs():
 
         datum_written = set()
 
+        # last 2 ones epoch,model are actually missing in most records...
+        assert nfields == 17
+
         while True:
             try:
                 row = next(reader)
             except StopIteration:
                 break
-            assert len(row) == nfields, row
+            assert len(row) in (nfields, nfields -2), (row, header, len(row), nfields)
 
             code = row[idx_wkid]
             latestWkid = row[idx_latestWkid]
@@ -591,6 +599,8 @@ def import_geogcs():
                     if modified_epsg_name.upper() == esri_name.upper() or modified_epsg_name.upper() + "_3D" == esri_name.upper() or modified_epsg_name.upper() + "_(3D)" == esri_name.upper():
                         print("GeogCRS ESRI:%s (%s) has the same name as EPSG:%s. Fixing authority to be EPSG" % (latestWkid, esri_name, latestWkid))
                         authority = "EPSG"
+
+            map_code_to_authority[code] = authority.upper()
 
             if authority == 'EPSG':
 
@@ -654,6 +664,13 @@ def import_geogcs():
                 assert is_degree or is_grad, row
                 cs_code = '6422' if is_degree else '6403'
 
+                if "CS[ellipsoidal,3]" in wkt2:
+                    assert 'AXIS["Ellipsoidal height (h)",up,ORDER[3],LENGTHUNIT["Meter",1.0]' in wkt2
+                    cs_code = '6423'
+                    geodetic_crs_type = "geographic 3D"
+                else:
+                    geodetic_crs_type = "geographic 2D"
+
                 deprecated = 1 if row[idx_deprecated] == 'yes' else 0
 
                 extent_auth_name, extent_code = find_extent(
@@ -665,7 +682,7 @@ def import_geogcs():
 
                         p = map_datum_esri_to_parameters[datum_code]
 
-                        sql = """INSERT INTO "geodetic_datum" VALUES('ESRI','%s','%s','%s','%s','%s','%s','%s',NULL,NULL,NULL,NULL,%d);""" % (
+                        sql = """INSERT INTO "geodetic_datum" VALUES('ESRI','%s','%s','%s','%s','%s','%s','%s',NULL,NULL,NULL,NULL,NULL,%d);""" % (
                             datum_code, p['esri_name'], p['description'], p['ellps_auth_name'], p['ellps_code'], pm_auth_name, pm_code, p['deprecated'])
                         all_sql.append(sql)
                         sql = """INSERT INTO "usage" VALUES('ESRI', '%s_USAGE','geodetic_datum','ESRI','%s','%s','%s','%s','%s');""" % (datum_code, datum_code, extent_auth_name, extent_code, 'EPSG', '1024')
@@ -696,7 +713,7 @@ def import_geogcs():
                                 'deprecated': p['deprecated']
                             }
 
-                            sql = """INSERT INTO "geodetic_datum" VALUES('ESRI','%s','%s','%s','%s','%s','%s','%s',NULL,NULL,NULL,NULL,%d);""" % (
+                            sql = """INSERT INTO "geodetic_datum" VALUES('ESRI','%s','%s','%s','%s','%s','%s','%s',NULL,NULL,NULL,NULL,NULL,%d);""" % (
                                 datum_code, p['esri_name'], p['description'], p['ellps_auth_name'], p['ellps_code'], pm_auth_name, pm_code, p['deprecated'])
                             all_sql.append(sql)
                             sql = """INSERT INTO "usage" VALUES('ESRI', '%s_USAGE','geodetic_datum','ESRI','%s','%s','%s','%s','%s');""" % (datum_code, datum_code, extent_auth_name, extent_code, 'EPSG', '1024')
@@ -709,7 +726,7 @@ def import_geogcs():
                 if esri_name not in map_geogcs_esri_name_to_auth_code:
                     map_geogcs_esri_name_to_auth_code[esri_name] = ['ESRI', code]
 
-                sql = """INSERT INTO "geodetic_crs" VALUES('ESRI','%s','%s',NULL,'geographic 2D','EPSG','%s','%s','%s',NULL,%d);""" % (
+                sql = f"""INSERT INTO "geodetic_crs" VALUES('ESRI','%s','%s',NULL,'{geodetic_crs_type}','EPSG','%s','%s','%s',NULL,%d);""" % (
                     code, esri_name, cs_code, datum_auth_name, datum_code, deprecated)
                 all_sql.append(sql)
                 sql = """INSERT INTO "usage" VALUES('ESRI', '%s_USAGE','geodetic_crs','ESRI','%s','%s','%s','%s','%s');""" % (code, code, extent_auth_name, extent_code, 'EPSG', '1024')
@@ -717,13 +734,24 @@ def import_geogcs():
 
                 if deprecated and code != latestWkid and code not in ('4305', '4812'):  # Voirol 1960 no longer in EPSG
                     cursor.execute(
-                        "SELECT name FROM geodetic_crs WHERE auth_name = 'EPSG' AND code = ?", (latestWkid,))
+                        "SELECT name, deprecated FROM geodetic_crs WHERE auth_name = 'EPSG' AND code = ?", (latestWkid,))
                     src_row = cursor.fetchone()
                     assert src_row, (code, latestWkid)
+                    _, deprecated = src_row
+                    if not deprecated:
+                        sql = """INSERT INTO "deprecation" VALUES('geodetic_crs','ESRI','%s','EPSG','%s','ESRI');""" % (
+                            code, latestWkid)
+                        all_sql.append(sql)
+                elif deprecated and code != latestWkid:
+                    mapDeprecatedToNonDeprecated[code] = latestWkid
 
-                    sql = """INSERT INTO "supersession" VALUES('geodetic_crs','ESRI','%s','geodetic_crs','EPSG','%s','ESRI',1);""" % (
-                        code, latestWkid)
-                    all_sql.append(sql)
+
+    for code in mapDeprecatedToNonDeprecated:
+        replacement_code = mapDeprecatedToNonDeprecated[code]
+        if replacement_code in map_code_to_authority:
+            sql = """INSERT INTO "deprecation" VALUES('geodetic_crs','ESRI','%s','%s','%s','ESRI');""" % (
+                code, map_code_to_authority[replacement_code], replacement_code)
+            all_sql.append(sql)
 
 ########################
 
@@ -917,6 +945,10 @@ def get_wkt_unit(UNIT_NAME, UNIT_VALUE, is_rate=False) -> Unit:
         uom_auth_name = 'EPSG'
         uom_code = '1041' if is_rate else '9202'
         assert UNIT_VALUE == '0.000001', UNIT_VALUE
+    elif UNIT_NAME == 'Parts_Per_Billion':
+        uom_auth_name = 'EPSG'
+        uom_code = '1030' if is_rate else '1028'
+        assert UNIT_VALUE == '0.000000001', UNIT_VALUE
     elif UNIT_NAME == 'Unity':
         assert not is_rate
         uom_auth_name = 'EPSG'
@@ -1244,6 +1276,7 @@ def insert_conversion_sql(esri_code: str, esri_name: str, epsg_code: str, epsg_n
 
 
 def import_projcs():
+
     with open(path_to_csv / 'pe_list_projcs.csv', 'rt') as csvfile:
         reader = csv.reader(csvfile)
         header = next(reader)
@@ -1451,8 +1484,6 @@ def import_projcs():
                             'Lambert Conic Conformal (1SP)']
                         assert params['Scale_Factor'].unit.uom_code == '9201', 'Unhandled scale unit {}'.format(
                             params['Scale_Factor'].unit.uom_code)
-                        assert params['Standard_Parallel_1'].value == params['Latitude_Of_Origin'].value
-                        assert params['Standard_Parallel_1'].unit == params['Latitude_Of_Origin'].unit
 
                     elif method == 'Lambert_Conformal_Conic' and 'Standard_Parallel_2' in params:
                         conversion_mapping = MAPPED_PROJCS_WITH_EXTRA_LOGIC['Lambert_Conformal_Conic']['Lambert Conic Conformal (2SP)']
@@ -1501,17 +1532,19 @@ def import_projcs():
             latestWkid = mapDeprecatedToNonDeprecated[deprecated]
 
             if latestWkid in wkid_set:
-                sql = """INSERT INTO "supersession" VALUES('projected_crs','ESRI','%s','projected_crs','ESRI','%s','ESRI',1);""" % (
+                sql = """INSERT INTO "deprecation" VALUES('projected_crs','ESRI','%s','ESRI','%s','ESRI');""" % (
                     code, latestWkid)
                 all_sql.append(sql)
             else:
                 cursor.execute(
-                    "SELECT name FROM projected_crs WHERE auth_name = 'EPSG' AND code = ?", (latestWkid,))
+                    "SELECT name, deprecated FROM projected_crs WHERE auth_name = 'EPSG' AND code = ?", (latestWkid,))
                 src_row = cursor.fetchone()
                 assert src_row, row
-                sql = """INSERT INTO "supersession" VALUES('projected_crs','ESRI','%s','projected_crs','EPSG','%s','ESRI',1);""" % (
-                    code, latestWkid)
-                all_sql.append(sql)
+                _, deprecated = src_row
+                if not deprecated:
+                    sql = """INSERT INTO "deprecation" VALUES('projected_crs','ESRI','%s','EPSG','%s','ESRI');""" % (
+                        code, latestWkid)
+                    all_sql.append(sql)
 
 
 ########################
@@ -1603,6 +1636,11 @@ map_vertcs_esri_name_to_auth_code = {}
 
 
 def import_vertcs():
+
+    # Those 2 maps are used to fill the deprecation table
+    map_code_to_authority = {}
+    mapDeprecatedToNonDeprecated = {}
+
     with open(path_to_csv / 'pe_list_vertcs.csv', 'rt') as csvfile:
         reader = csv.reader(csvfile)
         header = next(reader)
@@ -1647,6 +1685,8 @@ def import_vertcs():
         idx_rlon = header.index('rlon')
         assert idx_rlon >= 0
 
+        assert nfields == 17
+
         vdatum_written = set()
 
         sql = """-- vertical coordinate system for ellipsoidal height. Not really ISO 19111 valid..."""
@@ -1661,7 +1701,7 @@ def import_vertcs():
                 row = next(reader)
             except StopIteration:
                 break
-            assert len(row) == nfields, row
+            assert len(row) in (nfields, nfields - 2), (row, len(row), nfields)
 
             code = row[idx_wkid]
             latestWkid = row[idx_latestWkid]
@@ -1678,6 +1718,8 @@ def import_vertcs():
                     if modified_epsg_name.upper() == esri_name.upper():
                         print("VertCRS ESRI:%s (%s) has the same name as EPSG:%s. Fixing authority to be EPSG" % (latestWkid, esri_name, latestWkid))
                         authority = "EPSG"
+
+            map_code_to_authority[code] = authority.upper()
 
             if authority == 'EPSG':
 
@@ -1751,7 +1793,7 @@ def import_vertcs():
 
                         datum_code = new_datum_code
 
-                        sql = """INSERT INTO "vertical_datum" VALUES('ESRI','%s','%s',NULL,NULL,NULL,NULL,NULL,%d);""" % (
+                        sql = """INSERT INTO "vertical_datum" VALUES('ESRI','%s','%s',NULL,NULL,NULL,NULL,NULL,NULL,%d);""" % (
                             datum_code, p['esri_name'], p['deprecated'])
                         all_sql.append(sql)
                         sql = """INSERT INTO "usage" VALUES('ESRI', '%s_USAGE','vertical_datum','ESRI','%s','%s','%s','%s','%s');""" % (datum_code, datum_code, extent_auth_name, extent_code, 'EPSG', '1024')
@@ -1767,7 +1809,7 @@ def import_vertcs():
                     vdatum_written.add(datum_code)
 
                     p = map_vdatum_esri_to_parameters[datum_code]
-                    sql = """INSERT INTO "vertical_datum" VALUES('ESRI','%s','%s',NULL,NULL,NULL,NULL,NULL,%d);""" % (
+                    sql = """INSERT INTO "vertical_datum" VALUES('ESRI','%s','%s',NULL,NULL,NULL,NULL,NULL,NULL,%d);""" % (
                         datum_code, p['esri_name'], p['deprecated'])
                     all_sql.append(sql)
                     sql = """INSERT INTO "usage" VALUES('ESRI', '%s_USAGE','vertical_datum','ESRI','%s','%s','%s','%s','%s');""" % (datum_code, datum_code, extent_auth_name, extent_code, 'EPSG', '1024')
@@ -1807,13 +1849,24 @@ def import_vertcs():
 
                 if deprecated and code != latestWkid:
                     cursor.execute(
-                        "SELECT name FROM vertical_crs WHERE auth_name = 'EPSG' AND code = ?", (latestWkid,))
+                        "SELECT name, deprecated FROM vertical_crs WHERE auth_name = 'EPSG' AND code = ?", (latestWkid,))
                     src_row = cursor.fetchone()
                     assert src_row
+                    _, deprecated = src_row
+                    if not deprecated:
+                        sql = """INSERT INTO "deprecation" VALUES('vertical_crs','ESRI','%s','EPSG','%s','ESRI');""" % (
+                            code, latestWkid)
+                        all_sql.append(sql)
+                elif deprecated and code != latestWkid:
+                    mapDeprecatedToNonDeprecated[code] = latestWkid
 
-                    sql = """INSERT INTO "supersession" VALUES('vertical_crs','ESRI','%s','vertical_crs','EPSG','%s','ESRI',1);""" % (
-                        code, latestWkid)
-                    all_sql.append(sql)
+
+    for code in mapDeprecatedToNonDeprecated:
+        replacement_code = mapDeprecatedToNonDeprecated[code]
+        if replacement_code in map_code_to_authority:
+            sql = """INSERT INTO "deprecation" VALUES('vertical_crs','ESRI','%s','%s','%s','ESRI');""" % (
+                code, map_code_to_authority[replacement_code], replacement_code)
+            all_sql.append(sql)
 
 
 ########################

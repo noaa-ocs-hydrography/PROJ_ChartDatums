@@ -9,7 +9,7 @@
 ################################################################################
 # General settings
 ################################################################################
-cmake_minimum_required(VERSION 3.9 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.16)
 
 project(PROJ
   DESCRIPTION "PROJ coordinate transformation software library"
@@ -44,27 +44,53 @@ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 # Set warnings as variables, then store as cache options
 set(PROJ_common_WARN_FLAGS  # common only to GNU/Clang C/C++
   -Wall
+  -Wdate-time
+  -Werror=format-security
+  -Werror=vla
   -Wextra
-  -Wswitch
-  -Wshadow
-  -Wunused-parameter
-  -Wmissing-declarations
   -Wformat
-  -Wformat-security
+  -Wmissing-declarations
+  -Wshadow
+  -Wswitch
+  -Wunused-parameter
 )
 if("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
+  set(PROJ_common_WARN_FLAGS ${PROJ_common_WARN_FLAGS}
+    -Wduplicated-cond
+    -Wduplicated-branches
+    -Wlogical-op
+  )
   set(PROJ_C_WARN_FLAGS ${PROJ_common_WARN_FLAGS}
     -Wmissing-prototypes
   )
-  set(PROJ_CXX_WARN_FLAGS ${PROJ_common_WARN_FLAGS})
+  set(PROJ_CXX_WARN_FLAGS ${PROJ_common_WARN_FLAGS}
+    -Weffc++
+    -Wextra-semi
+    # -Wold-style-cast
+    -Woverloaded-virtual
+    -Wzero-as-null-pointer-constant
+  )
 elseif("${CMAKE_C_COMPILER_ID}" MATCHES "Clang")
+  set(PROJ_common_WARN_FLAGS ${PROJ_common_WARN_FLAGS}
+    -Wcomma
+    -Wdeprecated
+    -Wdocumentation -Wno-documentation-deprecated-sync
+    -Wfloat-conversion
+    -Wlogical-op-parentheses
+    # -Wweak-vtables
+  )
   set(PROJ_C_WARN_FLAGS ${PROJ_common_WARN_FLAGS}
     -Wmissing-prototypes
-    -Wfloat-conversion
     -Wc11-extensions
   )
   set(PROJ_CXX_WARN_FLAGS ${PROJ_common_WARN_FLAGS}
-    -Wfloat-conversion
+    -Weffc++
+    -Wextra-semi
+    # -Wold-style-cast
+    -Woverloaded-virtual
+    -Wshorten-64-to-32
+    -Wunused-private-field
+    -Wzero-as-null-pointer-constant
   )
 elseif("${CMAKE_C_COMPILER_ID}" STREQUAL "MSVC")
   add_definitions(/D_CRT_SECURE_NO_WARNINGS) # Eliminate deprecation warnings
@@ -115,7 +141,7 @@ message(STATUS "Configuring PROJ:")
 #PROJ version information
 ################################################################################
 include(ProjVersion)
-proj_version(MAJOR 9 MINOR 4 PATCH 0)
+proj_version(MAJOR 9 MINOR 5 PATCH 0)
 set(PROJ_SOVERSION 25)
 set(PROJ_BUILD_VERSION "${PROJ_SOVERSION}.${PROJ_VERSION}")
 
@@ -176,15 +202,22 @@ if(NOT EXE_SQLITE3)
   message(SEND_ERROR "sqlite3 binary not found!")
 endif()
 
-find_package(Sqlite3 REQUIRED)
-if(NOT SQLITE3_FOUND)
-  message(SEND_ERROR "sqlite3 dependency not found!")
+# Deprecated variables since PROJ 9.4.0
+if(DEFINED SQLITE3_INCLUDE_DIR)
+  message(DEPRECATION "Use SQLite3_INCLUDE_DIR instead of SQLITE3_INCLUDE_DIR")
+  set(SQLite3_INCLUDE_DIR ${SQLITE3_INCLUDE_DIR})
 endif()
+if(DEFINED SQLITE3_LIBRARY)
+  message(DEPRECATION "Use SQLite3_LIBRARY instead of SQLITE3_LIBRARY")
+  set(SQLite3_LIBRARY ${SQLITE3_LIBRARY})
+endif()
+
+find_package(SQLite3 REQUIRED)
 
 # Would build and run with older versions, but with horrible performance
 # See https://github.com/OSGeo/PROJ/issues/1718
-if("${SQLITE3_VERSION}" VERSION_LESS "3.11")
-  message(SEND_ERROR "sqlite3 >= 3.11 required!")
+if(SQLite3_VERSION VERSION_LESS "3.11")
+  message(SEND_ERROR "SQLite3 >= 3.11 required!")
 endif()
 
 ################################################################################
@@ -219,15 +252,12 @@ if(ENABLE_CURL)
   if(CURL_FOUND)
     set(CURL_ENABLED TRUE)
 
-    # Target CURL::libcurl only defined since CMake 3.12
-    # TODO: remove this when CMake >= 3.12 required
-    if(NOT TARGET CURL::libcurl)
-      add_library(CURL::libcurl INTERFACE IMPORTED)
-      set_target_properties(CURL::libcurl PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${CURL_INCLUDE_DIRS}"
-        INTERFACE_LINK_LIBRARIES      "${CURL_LIBRARIES}"
-      )
-    endif()
+    # Curl SSL options are described in
+    #   https://curl.se/libcurl/c/CURLOPT_SSL_OPTIONS.html
+    #set(CURLSSLOPT_NO_REVOKE 2)
+    #set(SSL_OPTIONS ${CURLSSLOPT_NO_REVOKE})
+    #add_compile_definitions(SSL_OPTIONS=${SSL_OPTIONS})
+
   else()
     message(SEND_ERROR "curl dependency not found!")
   endif()

@@ -637,6 +637,13 @@ static const MethodMapping projectionMethodMappings[] = {
      // LCC 2SP
      paramsLCC2SP},
 
+    {EPSG_NAME_METHOD_AZIMUTHAL_EQUIDISTANT,
+     EPSG_CODE_METHOD_AZIMUTHAL_EQUIDISTANT, "Azimuthal_Equidistant", "aeqd",
+     nullptr, paramsAEQD},
+
+    // We don't actually implement the Modified variant of Azimuthal Equidistant
+    // but the exact one. The difference between both is neglectable in a few
+    // hundred of kilometers away from the center of projection
     {EPSG_NAME_METHOD_MODIFIED_AZIMUTHAL_EQUIDISTANT,
      EPSG_CODE_METHOD_MODIFIED_AZIMUTHAL_EQUIDISTANT, "Azimuthal_Equidistant",
      "aeqd", nullptr, paramsAEQD},
@@ -752,6 +759,13 @@ static const MethodMapping projectionMethodMappings[] = {
 
     {EPSG_NAME_METHOD_KROVAK, EPSG_CODE_METHOD_KROVAK, "Krovak", "krovak",
      "axis=swu", krovakParameters},
+
+    {EPSG_NAME_METHOD_KROVAK_MODIFIED_NORTH_ORIENTED,
+     EPSG_CODE_METHOD_KROVAK_MODIFIED_NORTH_ORIENTED, nullptr, "mod_krovak",
+     nullptr, krovakParameters},
+
+    {EPSG_NAME_METHOD_KROVAK_MODIFIED, EPSG_CODE_METHOD_KROVAK_MODIFIED,
+     nullptr, "mod_krovak", "axis=swu", krovakParameters},
 
     {EPSG_NAME_METHOD_LAMBERT_AZIMUTHAL_EQUAL_AREA,
      EPSG_CODE_METHOD_LAMBERT_AZIMUTHAL_EQUAL_AREA,
@@ -922,7 +936,7 @@ const MethodMapping *getProjectionMethodMappings(size_t &nElts) {
 #define METHOD_NAME_CODE(method)                                               \
     { EPSG_NAME_METHOD_##method, EPSG_CODE_METHOD_##method }
 
-const struct MethodNameCode methodNameCodes[] = {
+const struct MethodNameCode methodNameCodesList[] = {
     // Projection methods
     METHOD_NAME_CODE(TRANSVERSE_MERCATOR),
     METHOD_NAME_CODE(TRANSVERSE_MERCATOR_SOUTH_ORIENTATED),
@@ -1011,8 +1025,8 @@ const struct MethodNameCode methodNameCodes[] = {
 };
 
 const MethodNameCode *getMethodNameCodes(size_t &nElts) {
-    nElts = sizeof(methodNameCodes) / sizeof(methodNameCodes[0]);
-    return methodNameCodes;
+    nElts = sizeof(methodNameCodesList) / sizeof(methodNameCodesList[0]);
+    return methodNameCodesList;
 }
 
 #define PARAM_NAME_CODE(method)                                                \
@@ -1054,6 +1068,7 @@ const struct ParamNameCode paramNameCodes[] = {
     PARAM_NAME_CODE(LATITUDE_LONGITUDE_DIFFERENCE_FILE),
     PARAM_NAME_CODE(GEOID_CORRECTION_FILENAME),
     PARAM_NAME_CODE(VERTICAL_OFFSET_FILE),
+    PARAM_NAME_CODE(GEOID_MODEL_DIFFERENCE_FILE),
     PARAM_NAME_CODE(LATITUDE_DIFFERENCE_FILE),
     PARAM_NAME_CODE(LONGITUDE_DIFFERENCE_FILE),
     PARAM_NAME_CODE(UNIT_CONVERSION_SCALAR),

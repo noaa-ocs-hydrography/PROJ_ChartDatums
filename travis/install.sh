@@ -25,6 +25,9 @@ else
     USE_CCACHE=OFF
 fi
 
+# Ensure directory exists for PROJ_DB_CACHE_DIR
+mkdir -p $HOME/.ccache
+
 if test "x${CMAKE_BUILD_TYPE}" = "x"; then
     CMAKE_BUILD_TYPE=Release
 fi
@@ -55,6 +58,7 @@ mkdir shared_build
 cd shared_build
 cmake \
   -D CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+  -DCMAKE_UNITY_BUILD=ON \
   -D USE_CCACHE=${USE_CCACHE} \
   ${PROJ_CMAKE_BUILD_OPTIONS:-} \
   -D PROJ_DB_CACHE_DIR=$HOME/.ccache \

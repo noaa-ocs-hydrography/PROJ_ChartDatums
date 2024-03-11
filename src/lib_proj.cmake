@@ -258,6 +258,23 @@ set(SRC_LIBPROJ_CORE
   ${CMAKE_CURRENT_BINARY_DIR}/proj_config.h
 )
 
+# Skip Unity build for specific files
+set(SKIP_UNITY_BUILD_FILES
+  list.cpp # because if sets DO_NOT_DEFINE_PROJ_HEAD
+  transformations/defmodel.cpp # Evaluator class conflict
+  transformations/tinshift.cpp # Evaluator class conflict
+  wkt1_parser.cpp
+  wkt2_parser.cpp
+  wkt1_generated_parser.c
+  wkt2_generated_parser.c
+)
+if(WIN32)
+  list(APPEND SKIP_UNITY_BUILD_FILES
+    networkfilemanager.cpp
+  )
+endif()
+set_property(SOURCE ${SKIP_UNITY_BUILD_FILES} PROPERTY SKIP_UNITY_BUILD_INCLUSION ON)
+
 set(HEADERS_LIBPROJ
   proj.h
   proj_experimental.h
@@ -424,6 +441,13 @@ set_target_properties(proj
 set(PROJ_LIBRARIES proj)
 # hack, required for test/unit
 set(PROJ_LIBRARIES ${PROJ_LIBRARIES} PARENT_SCOPE)
+if(WIN32)
+target_link_libraries (proj
+  PRIVATE
+    shell32.lib
+    ole32.lib
+)
+endif()
 if(UNIX)
   find_library(M_LIB m)
   if(M_LIB)
@@ -438,8 +462,7 @@ if(Threads_FOUND AND CMAKE_USE_PTHREADS_INIT)
   target_link_libraries(proj PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 endif()
 
-target_include_directories(proj PRIVATE ${SQLITE3_INCLUDE_DIR})
-target_link_libraries(proj PRIVATE ${SQLITE3_LIBRARY})
+target_link_libraries(proj PRIVATE SQLite::SQLite3)
 
 if(NLOHMANN_JSON STREQUAL "external")
   target_compile_definitions(proj PRIVATE EXTERNAL_NLOHMANN_JSON)
@@ -449,26 +472,12 @@ endif()
 
 if(TIFF_ENABLED)
   target_compile_definitions(proj PRIVATE -DTIFF_ENABLED)
-  if( CMAKE_VERSION VERSION_LESS 3.11 AND CMAKE_CROSSCOMPILING )
-      # Hack needed for ubuntu:18.04 mingw64 cross compiling to avoid
-      # -isystem to be emitted (similar to https://discourse.cmake.org/t/use-of-isystem/1574)
-      target_include_directories(proj PRIVATE ${TIFF_INCLUDE_DIRS})
-      target_link_libraries(proj PRIVATE ${TIFF_LIBRARIES})
-  else()
-      target_link_libraries(proj PRIVATE TIFF::TIFF)
-  endif()
+  target_link_libraries(proj PRIVATE TIFF::TIFF)
 endif()
 
 if(CURL_ENABLED)
   target_compile_definitions(proj PRIVATE -DCURL_ENABLED)
-  if( CMAKE_VERSION VERSION_LESS 3.11 AND CMAKE_CROSSCOMPILING )
-      # Hack needed for ubuntu:18.04 mingw64 cross compiling to avoid
-      # -isystem to be emitted (similar to https://discourse.cmake.org/t/use-of-isystem/1574)
-      target_include_directories(proj PRIVATE ${CURL_INCLUDE_DIRS})
-      target_link_libraries(proj PRIVATE ${CURL_LIBRARIES})
-  else()
-      target_link_libraries(proj PRIVATE CURL::libcurl)
-  endif()
+  target_link_libraries(proj PRIVATE CURL::libcurl)
   target_link_libraries(proj
     PRIVATE
       $<$<CXX_COMPILER_ID:MSVC>:ws2_32>

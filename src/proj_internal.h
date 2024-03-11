@@ -343,7 +343,9 @@ struct PJCoordOperation {
     std::string name{};
     double accuracy = -1.0;
     double pseudoArea = 0.0;
+    std::string areaName{};
     bool isOffshore = false;
+    bool isUnknownAreaName = false;
     bool isPriorityOp = false;
     bool srcIsLonLatDegree = false;
     bool srcIsLatLonDegree = false;
@@ -364,8 +366,8 @@ struct PJCoordOperation {
                      double minySrcIn, double maxxSrcIn, double maxySrcIn,
                      double minxDstIn, double minyDstIn, double maxxDstIn,
                      double maxyDstIn, PJ *pjIn, const std::string &nameIn,
-                     double accuracyIn, double pseudoAreaIn, bool isOffshoreIn,
-                     const PJ *pjSrcGeocentricToLonLatIn,
+                     double accuracyIn, double pseudoAreaIn,
+                     const char *areaName, const PJ *pjSrcGeocentricToLonLatIn,
                      const PJ *pjDstGeocentricToLonLatIn);
 
     PJCoordOperation(const PJCoordOperation &) = delete;
@@ -377,7 +379,9 @@ struct PJCoordOperation {
           minyDst(other.minyDst), maxxDst(other.maxxDst),
           maxyDst(other.maxyDst), pj(proj_clone(ctx, other.pj)),
           name(std::move(other.name)), accuracy(other.accuracy),
-          pseudoArea(other.pseudoArea), isOffshore(other.isOffshore),
+          pseudoArea(other.pseudoArea), areaName(other.areaName),
+          isOffshore(other.isOffshore),
+          isUnknownAreaName(other.isUnknownAreaName),
           isPriorityOp(other.isPriorityOp),
           srcIsLonLatDegree(other.srcIsLonLatDegree),
           srcIsLatLonDegree(other.srcIsLatLonDegree),
@@ -399,7 +403,9 @@ struct PJCoordOperation {
           minyDst(other.minyDst), maxxDst(other.maxxDst),
           maxyDst(other.maxyDst), name(std::move(other.name)),
           accuracy(other.accuracy), pseudoArea(other.pseudoArea),
-          isOffshore(other.isOffshore), isPriorityOp(other.isPriorityOp),
+          areaName(std::move(other.areaName)), isOffshore(other.isOffshore),
+          isUnknownAreaName(other.isUnknownAreaName),
+          isPriorityOp(other.isPriorityOp),
           srcIsLonLatDegree(other.srcIsLonLatDegree),
           srcIsLatLonDegree(other.srcIsLatLonDegree),
           dstIsLonLatDegree(other.dstIsLonLatDegree),
@@ -422,7 +428,7 @@ struct PJCoordOperation {
                maxxDst == other.maxxDst && maxyDst == other.maxyDst &&
                name == other.name &&
                proj_is_equivalent_to(pj, other.pj, PJ_COMP_STRICT) &&
-               accuracy == other.accuracy && isOffshore == other.isOffshore;
+               accuracy == other.accuracy && areaName == other.areaName;
     }
 
     bool operator!=(const PJCoordOperation &other) const {
@@ -832,7 +838,7 @@ struct pj_ctx {
     static pj_ctx createDefault();
 };
 
-#ifdef PJ_LIB_
+#ifndef DO_NOT_DEFINE_PROJ_HEAD
 #define PROJ_HEAD(name, desc) static const char des_##name[] = desc
 
 #define OPERATION(name, NEED_ELLPS)                                            \
@@ -859,14 +865,14 @@ struct pj_ctx {
     PJ *pj_projection_specific_setup_##name(PJ *P)
 
 /* In ISO19000 lingo, an operation is either a conversion or a transformation */
-#define CONVERSION(name, need_ellps) OPERATION(name, need_ellps)
-#define TRANSFORMATION(name, need_ellps) OPERATION(name, need_ellps)
+#define PJ_CONVERSION(name, need_ellps) OPERATION(name, need_ellps)
+#define PJ_TRANSFORMATION(name, need_ellps) OPERATION(name, need_ellps)
 
 /* In PROJ.4 a projection is a conversion taking angular input and giving scaled
  * linear output */
-#define PROJECTION(name) CONVERSION(name, 1)
+#define PJ_PROJECTION(name) PJ_CONVERSION(name, 1)
 
-#endif /* def PJ_LIB_ */
+#endif /* DO_NOT_DEFINE_PROJ_HEAD */
 
 /* procedure prototypes */
 double PROJ_DLL dmstor(const char *, char **);
@@ -1001,7 +1007,7 @@ PJ_LPZ pj_inv3d(PJ_XYZ, PJ *);
 
 void pj_clear_initcache(void);
 void PROJ_DLL pj_pr_list(PJ *); /* used by proj.cpp */
-char *pj_get_def(PJ *, int);
+char *pj_get_def(const PJ *, int);
 int pj_has_inverse(PJ *);
 
 char *pj_strdup(const char *str);

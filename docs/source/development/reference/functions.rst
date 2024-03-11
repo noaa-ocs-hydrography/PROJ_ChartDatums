@@ -667,7 +667,8 @@ Lists
 
 .. c:function:: const PJ_PRIME_MERIDIANS* proj_list_prime_meridians(void)
 
-    Get a pointer to an array of prime meridians defined in PROJ. The last
+    Get a pointer to an array of hard-coded prime meridians defined in PROJ.
+    Note that this list is no longer updated. The last
     entry of the returned array is a NULL-entry. The array is statically
     allocated and does not need to be freed after use.
 
@@ -1043,7 +1044,18 @@ Conversely, objects returned by :c:func:`proj_create` and :c:func:`proj_create_a
 which are not of type CRS (can be tested with :c:func:`proj_is_crs`),
 will return an error when used with functions of this section.
 
+Base functions
+~~~~~~~~~~~~~~
+
 .. doxygengroup:: iso19111_functions
    :project: doxygen_api
    :content-only:
 
+Advanced functions
+~~~~~~~~~~~~~~~~~~
+
+Available in :file:`proj.h` since PROJ 9.4. Previously were available in :file:`proj_experimental.h`.
+
+.. doxygengroup:: iso19111_advanced_functions
+   :project: doxygen_api
+   :content-only:

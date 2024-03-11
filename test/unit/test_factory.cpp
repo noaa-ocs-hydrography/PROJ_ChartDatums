@@ -305,6 +305,18 @@ TEST(factory, AuthorityFactory_createVerticalDatum) {
     EXPECT_TRUE(extent->isEquivalentTo(factory->createExtent("1262").get()));
     EXPECT_TRUE(vrf->publicationDate().has_value());
     EXPECT_EQ(vrf->publicationDate()->toString(), "2008-01-01");
+    EXPECT_TRUE(!vrf->anchorEpoch().has_value());
+}
+
+// ---------------------------------------------------------------------------
+
+TEST(factory, AuthorityFactory_createVerticalDatum_with_anchor_epoch) {
+    auto factory = AuthorityFactory::create(DatabaseContext::create(), "EPSG");
+    // "Canadian Geodetic Vertical Datum of 2013 (CGG2013a) epoch 2010"
+    auto vrf = factory->createVerticalDatum("1256");
+    EXPECT_TRUE(vrf->anchorEpoch().has_value());
+    EXPECT_NEAR(vrf->anchorEpoch()->convertToUnit(UnitOfMeasure::YEAR), 2010.0,
+                1e-6);
 }
 
 // ---------------------------------------------------------------------------
@@ -594,6 +606,18 @@ TEST(factory, AuthorityFactory_createGeodeticCRS_geocentric) {
         factory->createDatumEnsemble("6326").get()));
     EXPECT_TRUE(crs->coordinateSystem()->isEquivalentTo(
         factory->createCoordinateSystem("6500").get()));
+}
+
+// ---------------------------------------------------------------------------
+
+TEST(factory, AuthorityFactory_createGeographicCRS) {
+    auto factory = AuthorityFactory::create(DatabaseContext::create(), "EPSG");
+    auto crs = factory->createGeographicCRS("4979");
+    ASSERT_TRUE(nn_dynamic_pointer_cast<GeographicCRS>(crs) != nullptr);
+    ASSERT_EQ(crs->identifiers().size(), 1U);
+    EXPECT_EQ(crs->identifiers()[0]->code(), "4979");
+
+    EXPECT_THROW(factory->createGeographicCRS("4978"), FactoryException);
 }
 
 // ---------------------------------------------------------------------------
@@ -1753,7 +1777,7 @@ class FactoryWithTmpDatabase : public ::testing::Test {
             execute("INSERT INTO geodetic_datum "
                     "VALUES('EPSG','6326','World Geodetic System 1984','',"
                     "'EPSG','7030','EPSG','8901',NULL,NULL,NULL,"
-                    "'my anchor',0);"))
+                    "'my anchor',NULL,0);"))
             << last_error();
         ASSERT_TRUE(execute("INSERT INTO usage VALUES('EPSG',"
                             "'geodetic_datum_6326_usage','geodetic_datum',"
@@ -1761,7 +1785,7 @@ class FactoryWithTmpDatabase : public ::testing::Test {
             << last_error();
         ASSERT_TRUE(
             execute("INSERT INTO vertical_datum VALUES('EPSG','1027','EGM2008 "
-                    "geoid',NULL,NULL,NULL,NULL,'my anchor',0);"))
+                    "geoid',NULL,NULL,NULL,NULL,'my anchor',NULL,0);"))
             << last_error();
         ASSERT_TRUE(execute("INSERT INTO usage VALUES('EPSG',"
                             "'vertical_datum_1027_usage','vertical_datum',"
@@ -1874,7 +1898,7 @@ class FactoryWithTmpDatabase : public ::testing::Test {
 
         ASSERT_TRUE(execute(
             "INSERT INTO helmert_transformation "
-            "VALUES('EPSG','DUMMY_HELMERT','name',NULL,'EPSG','9603','"
+            "VALUES('EPSG','DUMMY_HELMERT','dummy_helmert',NULL,'EPSG','9603','"
             "Geocentric translations (geog2D domain)','EPSG','4326',"
             "'EPSG','4326',44.0,-143."
             "0,-90.0,-294.0,'EPSG','9001',NULL,NULL,NULL,NULL,NULL,NULL,"
@@ -1890,7 +1914,8 @@ class FactoryWithTmpDatabase : public ::testing::Test {
 
         ASSERT_TRUE(execute(
             "INSERT INTO grid_transformation "
-            "VALUES('EPSG','DUMMY_GRID_TRANSFORMATION','name',NULL,"
+            "VALUES('EPSG','DUMMY_GRID_TRANSFORMATION',"
+            "'dummy_grid_transformation',NULL,"
             "'EPSG','9615'"
             ",'NTv2','EPSG','4326','EPSG','4326',1.0,'EPSG','"
             "8656','Latitude and longitude difference "
@@ -1912,7 +1937,8 @@ class FactoryWithTmpDatabase : public ::testing::Test {
 
         ASSERT_TRUE(execute(
             "INSERT INTO other_transformation "
-            "VALUES('EPSG','DUMMY_OTHER_TRANSFORMATION','name',NULL,"
+            "VALUES('EPSG','DUMMY_OTHER_TRANSFORMATION',"
+            "'dummy_other_transformation',NULL,"
             "'EPSG','9601','Longitude rotation',"
             "'EPSG','4326','EPSG','4326',0.0,'EPSG'"
             ",'8602','Longitude "
@@ -1930,7 +1956,8 @@ class FactoryWithTmpDatabase : public ::testing::Test {
             << last_error();
 
         ASSERT_TRUE(execute("INSERT INTO concatenated_operation "
-                            "VALUES('EPSG','DUMMY_CONCATENATED','name',NULL,"
+                            "VALUES('EPSG','DUMMY_CONCATENATED',"
+                            "'dummy_concatenated',NULL,"
                             "'EPSG','4326','EPSG'"
                             ",'4326',NULL,NULL,0);"))
             << last_error();
@@ -1961,7 +1988,7 @@ class FactoryWithTmpDatabase : public ::testing::Test {
                                 val + "','" + val +
                                 "','',"
                                 "'EPSG','7030','EPSG','8901',"
-                                "NULL,NULL,NULL,NULL,0);"))
+                                "NULL,NULL,NULL,NULL,NULL,0);"))
                 << last_error();
             ASSERT_TRUE(execute("INSERT INTO usage VALUES('FOO',"
                                 "'geodetic_datum_" +
@@ -2339,6 +2366,72 @@ TEST(factory, AuthorityFactory_getAvailableGeoidmodels) {
 // ---------------------------------------------------------------------------
 
 TEST_F(FactoryWithTmpDatabase,
+       AuthorityFactory_test_inversion_first_and_last_steps_of_concat_op) {
+    createStructure();
+    populateWithFakeEPSG();
+
+    // Completely dummy, to test proper inversion of first and last
+    // steps in ConcatenatedOperation, when it is needed
+    ASSERT_TRUE(execute("INSERT INTO geodetic_datum "
+                        "VALUES('EPSG','OTHER_DATUM','Other datum','',"
+                        "'EPSG','7030','EPSG','8901',NULL,NULL,NULL,"
+                        "'my anchor',NULL,0);"))
+        << last_error();
+    ASSERT_TRUE(
+        execute("INSERT INTO geodetic_crs VALUES('EPSG','OTHER_GEOG_CRS',"
+                "'OTHER_GEOG_CRS',NULL,'geographic 2D','EPSG','6422',"
+                "'EPSG','OTHER_DATUM',NULL,0);"))
+        << last_error();
+    ASSERT_TRUE(
+        execute("INSERT INTO other_transformation "
+                "VALUES('EPSG','4326_TO_OTHER_GEOG_CRS',"
+                "'4326_to_other_geog_crs',NULL,"
+                "'EPSG','9601','Longitude rotation',"
+                "'EPSG','4326','EPSG','OTHER_GEOG_CRS',0.0,'EPSG'"
+                ",'8602','Longitude "
+                "offset',-17.4,'EPSG','9110',NULL,NULL,NULL,NULL,NULL,NULL,"
+                "NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,"
+                "NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,"
+                "NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0);"))
+        << last_error();
+    ASSERT_TRUE(
+        execute("INSERT INTO other_transformation "
+                "VALUES('EPSG','OTHER_GEOG_CRS_TO_4326',"
+                "'other_geog_crs_to_4326',NULL,"
+                "'EPSG','9601','Longitude rotation',"
+                "'EPSG','OTHER_GEOG_CRS','EPSG','4326',0.0,'EPSG'"
+                ",'8602','Longitude "
+                "offset',17.4,'EPSG','9110',NULL,NULL,NULL,NULL,NULL,NULL,"
+                "NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,"
+                "NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,"
+                "NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0);"))
+        << last_error();
+    ASSERT_TRUE(execute("INSERT INTO concatenated_operation "
+                        "VALUES('EPSG','DUMMY_CONCATENATED_2',"
+                        "'dummy_concatenated_2',NULL,"
+                        "'EPSG','4326','EPSG'"
+                        ",'4326',NULL,NULL,0);"))
+        << last_error();
+    ASSERT_TRUE(execute("INSERT INTO concatenated_operation_step "
+                        "VALUES('EPSG','DUMMY_CONCATENATED_2',1,"
+                        "'EPSG','OTHER_GEOG_CRS_TO_4326');"))
+        << last_error();
+
+    ASSERT_TRUE(execute("INSERT INTO concatenated_operation_step "
+                        "VALUES('EPSG','DUMMY_CONCATENATED_2',2,"
+                        "'EPSG','4326_TO_OTHER_GEOG_CRS');"))
+        << last_error();
+
+    auto factoryEPSG = AuthorityFactory::create(DatabaseContext::create(m_ctxt),
+                                                std::string("EPSG"));
+    EXPECT_TRUE(nn_dynamic_pointer_cast<ConcatenatedOperation>(
+                    factoryEPSG->createObject("DUMMY_CONCATENATED_2")) !=
+                nullptr);
+}
+
+// ---------------------------------------------------------------------------
+
+TEST_F(FactoryWithTmpDatabase,
        AuthorityFactory_test_with_fake_EPSG_and_OTHER_database) {
     createStructure();
     populateWithFakeEPSG();
@@ -2354,7 +2447,7 @@ TEST_F(FactoryWithTmpDatabase,
         << last_error();
 
     ASSERT_TRUE(execute("INSERT INTO projected_crs "
-                        "VALUES('OTHER','OTHER_32631','WGS 84 / UTM zone "
+                        "VALUES('OTHER','OTHER_32631','my WGS 84 / UTM zone "
                         "31N',NULL,'EPSG','4400','OTHER','OTHER_4326',"
                         "'EPSG','16031',NULL,0);"))
         << last_error();
@@ -2391,7 +2484,8 @@ TEST_F(FactoryWithTmpDatabase,
 
     ASSERT_TRUE(execute(
         "INSERT INTO grid_transformation "
-        "VALUES('OTHER','OTHER_GRID_TRANSFORMATION','name',NULL,"
+        "VALUES('OTHER','OTHER_GRID_TRANSFORMATION',"
+        "'other_grid_transformation_2',NULL,"
         "'EPSG','9615'"
         ",'NTv2','EPSG','4326','OTHER','OTHER_4326',1.0,'EPSG','"
         "8656','Latitude and longitude difference "
@@ -2948,19 +3042,22 @@ TEST_F(FactoryWithTmpDatabase, custom_projected_crs) {
     populateWithFakeEPSG();
 
     ASSERT_TRUE(execute("INSERT INTO projected_crs "
-                        "VALUES('TEST_NS','TEST','my name',NULL,NULL,"
+                        "VALUES('TEST_NS','TEST',"
+                        "'custom_projected_crs',NULL,NULL,"
                         "NULL,NULL,NULL,NULL,NULL,"
                         "'+proj=mbt_s +unused_flag',0);"))
         << last_error();
 
     ASSERT_TRUE(execute("INSERT INTO projected_crs "
-                        "VALUES('TEST_NS','TEST_BOUND','my name',NULL,"
+                        "VALUES('TEST_NS','TEST_BOUND',"
+                        "'custom_projected_crs2',NULL,"
                         "NULL,NULL,NULL,NULL,NULL,NULL,"
                         "'+proj=mbt_s +unused_flag +towgs84=1,2,3',0);"))
         << last_error();
 
     ASSERT_TRUE(execute("INSERT INTO projected_crs "
-                        "VALUES('TEST_NS','TEST_WRONG','my name',NULL,"
+                        "VALUES('TEST_NS','TEST_WRONG',"
+                        "'custom_projected_crs3',NULL,"
                         "NULL,NULL,NULL,NULL,NULL,NULL,"
                         "'+proj=longlat',0);"))
         << last_error();
@@ -3010,7 +3107,7 @@ TEST_F(FactoryWithTmpDatabase, custom_projected_crs) {
         AuthorityFactory::create(DatabaseContext::create(m_ctxt), "TEST_NS");
     {
         auto crs = factory->createProjectedCRS("TEST");
-        EXPECT_EQ(*(crs->name()->description()), "my name");
+        EXPECT_EQ(*(crs->name()->description()), "custom_projected_crs");
         EXPECT_EQ(crs->identifiers().size(), 1U);
         EXPECT_EQ(crs->derivingConversion()->targetCRS().get(), crs.get());
         EXPECT_EQ(crs->exportToPROJString(PROJStringFormatter::create().get()),
@@ -3019,7 +3116,7 @@ TEST_F(FactoryWithTmpDatabase, custom_projected_crs) {
     }
     {
         auto crs = factory->createProjectedCRS("TEST_BOUND");
-        EXPECT_EQ(*(crs->name()->description()), "my name");
+        EXPECT_EQ(*(crs->name()->description()), "custom_projected_crs2");
         EXPECT_EQ(crs->identifiers().size(), 1U);
         EXPECT_EQ(crs->derivingConversion()->targetCRS().get(), crs.get());
         EXPECT_EQ(crs->exportToPROJString(PROJStringFormatter::create().get()),
@@ -3400,7 +3497,8 @@ TEST_F(FactoryWithTmpDatabase,
 
     ASSERT_TRUE(execute(
         "INSERT INTO other_transformation "
-        "VALUES('EPSG','NOOP_TRANSFORMATION_32631','name',NULL,"
+        "VALUES('EPSG','NOOP_TRANSFORMATION_32631',"
+        "'NOOP_TRANSFORMATION_32631',NULL,"
         "'PROJ','PROJString','+proj=noop',"
         "'EPSG','32631','EPSG','32631',0.0,"
         "NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,"
@@ -3419,7 +3517,8 @@ TEST_F(FactoryWithTmpDatabase,
 
     ASSERT_TRUE(execute(
         "INSERT INTO other_transformation "
-        "VALUES('EPSG','NOOP_TRANSFORMATION_4326','name',NULL,"
+        "VALUES('EPSG','NOOP_TRANSFORMATION_4326',"
+        "'NOOP_TRANSFORMATION_4326',NULL,"
         "'PROJ','PROJString','+proj=noop',"
         "'EPSG','4326','EPSG','4326',0.0,"
         "NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,"
@@ -4145,7 +4244,9 @@ TEST(factory, objectInsertion) {
         auto ctxt = DatabaseContext::create();
         ctxt->startInsertStatementsSession();
         const auto datum = GeodeticReferenceFrame::create(
-            PropertyMap().set(IdentifiedObject::NAME_KEY, "my datum"),
+            PropertyMap()
+                .set(IdentifiedObject::NAME_KEY, "my datum")
+                .set("ANCHOR_EPOCH", "2023"),
             Ellipsoid::WGS84, optional<std::string>("my anchor"),
             PrimeMeridian::GREENWICH);
         const auto crs = GeographicCRS::create(
@@ -4157,7 +4258,7 @@ TEST(factory, objectInsertion) {
         EXPECT_EQ(sql[0],
                   "INSERT INTO geodetic_datum VALUES('HOBU','1','my "
                   "datum','','EPSG','7030','EPSG','8901',NULL,NULL,NULL,"
-                  "'my anchor',0);");
+                  "'my anchor',2023.000,0);");
         const auto identified =
             crs->identify(AuthorityFactory::create(ctxt, std::string()));
         ASSERT_EQ(identified.size(), 1U);
@@ -4193,7 +4294,7 @@ TEST(factory, objectInsertion) {
                   "INSERT INTO geodetic_datum "
                   "VALUES('HOBU','GEODETIC_DATUM_MY_EPSG_4326','my "
                   "datum','','EPSG','7030','EPSG','8901',NULL,NULL,NULL,NULL,"
-                  "0);");
+                  "NULL,0);");
         const auto identified =
             crs->identify(AuthorityFactory::create(ctxt, std::string()));
         ASSERT_EQ(identified.size(), 1U);
@@ -4458,7 +4559,7 @@ TEST(factory, objectInsertion) {
         ASSERT_EQ(sql.size(), 4U);
         EXPECT_EQ(sql[0], "INSERT INTO vertical_datum VALUES('HOBU',"
                           "'VERTICAL_DATUM_XXXX','my datum','',NULL,NULL,NULL,"
-                          "'my anchor',0);");
+                          "'my anchor',NULL,0);");
         const auto identified =
             crs->identify(AuthorityFactory::create(ctxt, std::string()));
         ASSERT_EQ(identified.size(), 1U);
@@ -4470,6 +4571,40 @@ TEST(factory, objectInsertion) {
         EXPECT_EQ(identified.front().second, 100);
         EXPECT_TRUE(
             ctxt->getInsertStatementsFor(crs, "HOBU", "XXXX", false).empty());
+        ctxt->stopInsertStatementsSession();
+    }
+
+    // Same as above with ANCHOR_EPOCH
+    {
+        auto ctxt = DatabaseContext::create();
+        ctxt->startInsertStatementsSession();
+        PropertyMap propertiesVDatum;
+        propertiesVDatum.set(IdentifiedObject::NAME_KEY, "my datum");
+        propertiesVDatum.set("ANCHOR_EPOCH", "2023");
+        auto vdatum = VerticalReferenceFrame::create(
+            propertiesVDatum, optional<std::string>("my anchor"));
+        PropertyMap propertiesCRS;
+        propertiesCRS.set(IdentifiedObject::NAME_KEY, "my height");
+        const auto crs = VerticalCRS::create(
+            propertiesCRS, vdatum,
+            VerticalCS::createGravityRelatedHeight(UnitOfMeasure::METRE));
+        const auto sql =
+            ctxt->getInsertStatementsFor(crs, "HOBU", "YYYY", false);
+        ASSERT_EQ(sql.size(), 4U);
+        EXPECT_EQ(sql[0], "INSERT INTO vertical_datum VALUES('HOBU',"
+                          "'VERTICAL_DATUM_YYYY','my datum','',NULL,NULL,NULL,"
+                          "'my anchor',2023.000,0);");
+        const auto identified =
+            crs->identify(AuthorityFactory::create(ctxt, std::string()));
+        ASSERT_EQ(identified.size(), 1U);
+        EXPECT_EQ(
+            *(identified.front().first->identifiers().front()->codeSpace()),
+            "HOBU");
+        EXPECT_TRUE(identified.front().first->isEquivalentTo(
+            crs.get(), IComparable::Criterion::EQUIVALENT));
+        EXPECT_EQ(identified.front().second, 100);
+        EXPECT_TRUE(
+            ctxt->getInsertStatementsFor(crs, "HOBU", "YYYY", false).empty());
         ctxt->stopInsertStatementsSession();
     }
 

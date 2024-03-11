@@ -1,3 +1,126 @@
+9.4.0 Release Notes
+-------------------
+
+ Updates
+ -------
+
+ o Add support for transformations involving coordinate epoch changes
+   (PointMotionOperation), specifically for Canadian NAD83(CSRS)(#3884)
+
+ o SSL_OPTIONS: set SSL options on Curl library (#3936)
+
+ o Add support for unity builds (#3962)
+
+ o Added ability to install *.tif if present in data (#3970)
+
+ o createOperationsCompoundToGeog(): tune selection logic
+   when --grid-check known_available is specified (#3990)
+
+ o Increase CMake minimum version from 3.9 to 3.16 (#3997)
+
+ o CMake: use FetchContent to get googletest-1.12.1 (#4006)
+
+ o CMake: Replace custom FindSqlite3 with FindSQLite3 built-in (#4007)
+
+ o tpeqd: use numerically stable formula for computing the central angle
+   from (phi_1, lam_1) to (phi_2, lam_2) (#4009)
+
+ o Move content of proj_experimental.h to proj.h (#4019)
+
+ o Add +proj=mod_krovak projection method for Modified Krovak that
+   applies to S-JTSK/05 in the Czech Republic (#4021)
+
+ o PROJString formatter optimizer: simplify pipelines doing
+   [Modified]Krovak (South West) <--> [Modified]Krovak (East North)
+   by just doing an axis swap (#4034)
+
+ o +proj=gridshift: enhance to support grids referenced in projected CRS,
+   and with easting_offset/northing_offset corrections (#4038)
+
+ o Tune concatenated operation instanciation, reference CR2005 geoid for
+   Czechia and add (disabled by default) records for Czechia S-JTSK/05 based
+   transformations (#4044)
+
+ o Database: update to EPSG v11.004 (#4062)
+
+ Bug fixes
+ ---------
+
+ o Fix missing symbols at link time for Windows target in Visual Studio (#3984)
+
+ o Improve error message in axisswap (#3975)
+
+ o Avoid convergence errors in +proj=gridshift when using biquadratic
+    interpolation (#3985)
+
+
+9.3.1 Release Notes
+-------------------
+
+ Updates
+ -------
+
+ o Update to EPSG 10.098 (#3968)
+
+ o Update ESRI objects to v3.2.0 (#3944)
+
+ Bug fixes
+ ---------
+
+ o ITRF2008: fix wrong sign for 'dry' parameter of EURA and EURA_T  (#3870)
+
+ o Fix build error with MSVC 2019 in /std:c++20 on NN_NO_CHECK() (#3872)
+
+ o  ESRI WKT import: normalize GCS_unknown to unknown and D_unknown to unknown (#3874)
+
+ o CoordinateOperationFactory: deal with CompoundToCompound with a horizontal similarity
+   transformation and a ballpark vertical (#3881)
+
+ o Ellipsoid::_isEquivalentTo(): fix so that an ellipsoid of semi-major axis A (and
+   non-zero inv flattening) isn't equivalent to a sphere of radius A (#3882)
+
+ o isEquivalentTo(): make a datum name 'unknown' equivalent to another one (#3883)
+
+ o cs2cs: fix handling of input coordinates in grad (#3886)
+
+ o Make setargv.obj available on Universal Windows Platform (#3891)
+
+ o Allow opening proj.db with a URI (#3892)
+
+ o createOperations(): fix GeogCRS 3D with TOWGS84 to geocentric CRS (#3915)
+
+ o Fix test suite so that it can pass with ENABLE_TIFF=OFF (#3916)
+
+ o GeographicBoundingBox::intersects(): avoid infinite recursion and stack overflow
+   on invalid bounding boxes (#3919)
+
+ o Fix importing '+proj=topocentric ... +type=crs' by using a geocentric CRS as
+   the base CRS (#3924)
+
+ o Allow LOCAL_CS with 3 axes (#3928)
+
+ o WKT1 parser: in non-strict mode, accept missing UNIT[] in GEOGCS, GEOCCS,
+   PROJCS and VERT_CS elements (#3933)
+
+ o createOperations(): fix issue with a obscure case involving CompoundCRS of
+   unknown horizontal datum + boundCRS of vertical (#3934)
+
+ o createOperations(): fix bad PROJ pipeline when converting between Geog3D
+   with non-metre height to CompoundCRS (#3943)
+
+ o createOperations(): Fix possible null dereference on invalid WKT input (#3946)
+
+ o proj_factor: fix when input is a compound CRS of a projected CRS (#3950)
+
+ o pj_get_suggested_operation(): tune it to give correct result for RGAF09 to
+   RRAF 1991 / UTM zone 20N + Guadeloupe 1988 height transformation (#3954)
+
+ o Move static NameSpace::GLOBAL definition in static.cpp to avoid
+  'static initialization fiasco' (#3956)
+
+ o horner: allow arbitrary input type of coordinate (#3961)
+
+
 9.3.0 Release Notes
 -------------------
 

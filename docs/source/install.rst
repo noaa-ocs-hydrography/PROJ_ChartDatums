@@ -144,7 +144,7 @@ Build requirements
 
 - C99 compiler
 - C++11 compiler
-- CMake >= 3.9
+- CMake >= 3.16
 - SQLite3 >= 3.11: headers and library for target architecture, and sqlite3 executable for build architecture.
 - libtiff >= 4.0 (optional but recommended)
 - curl >= 7.29.0 (optional but recommended)
@@ -173,12 +173,8 @@ On Windows, one may need to specify generator::
 
     cmake -G "Visual Studio 15 2017" ..
 
-If the SQLite3 dependency is installed in a custom location, specify the
-paths to the include directory and the library::
-
-    cmake -DSQLITE3_INCLUDE_DIR=/opt/SQLite/include -DSQLITE3_LIBRARY=/opt/SQLite/lib/libsqlite3.so ..
-
-Alternatively, the custom prefix for SQLite3 can be specified::
+If the SQLite3 dependency is installed in a custom location, specify
+:option:`CMAKE_PREFIX_PATH`::
 
     cmake -DCMAKE_PREFIX_PATH=/opt/SQLite ..
 
@@ -187,10 +183,10 @@ Tests are run with::
 
     ctest
 
-With a successful install of PROJ we can now install data files using the
+With a successful install of PROJ, we can now install data files using the
 :program:`projsync` utility::
 
-    projsync --system-directory
+    projsync --system-directory --all
 
 which will download all resource files currently available for PROJ. If less than
 the entire collection of resource files is needed the call to :program:`projsync`
@@ -263,7 +259,7 @@ All cached entries can be viewed using ``cmake -LAH`` from a build directory.
 
     Build PROJ library shared. Default is ON. See also the CMake
     documentation for `BUILD_SHARED_LIBS
-    <https://cmake.org/cmake/help/v3.9/variable/BUILD_SHARED_LIBS.html>`_.
+    <https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html>`_.
 
     .. versionchanged:: 7.0
         Renamed from ``BUILD_LIBPROJ_SHARED``
@@ -283,7 +279,7 @@ All cached entries can be viewed using ``cmake -LAH`` from a build directory.
     Choose the type of build, options are: None (default), Debug, Release,
     RelWithDebInfo, or MinSizeRel. See also the CMake documentation for
     `CMAKE_BUILD_TYPE
-    <https://cmake.org/cmake/help/v3.9/variable/CMAKE_BUILD_TYPE.html>`_.
+    <https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html>`_.
 
     .. note::
         A default build is not optimized without specifying
@@ -315,6 +311,25 @@ All cached entries can be viewed using ``cmake -LAH`` from a build directory.
     :envvar:`OSGEO4W_ROOT` (if set), otherwise is ``c:/OSGeo4W``.
     Default for Unix-like is ``/usr/local/``.
 
+.. option:: CMAKE_PREFIX_PATH
+
+    `CMake variable
+    <https://cmake.org/cmake/help/latest/variable/CMAKE_PREFIX_PATH.html>`_
+    used to specify installation prefixes for SQLite3 and other dependencies.
+
+.. option:: CMAKE_UNITY_BUILD=OFF
+
+    .. versionadded:: 9.4
+
+    Default is OFF. This can be set to ON to build PROJ using the
+    `CMAKE_UNITY_BUILD
+    <https://cmake.org/cmake/help/latest/variable/CMAKE_UNITY_BUILD.html>`_.
+    feature.
+    This helps speeding PROJ build times. This feature is still considered
+    experimental for now, and could hide subtle bugs (we are not aware of
+    any at writing time though). We don't recommend it for mission critical
+    builds.
+
 .. option:: ENABLE_IPO=OFF
 
     Build library using the compiler's `interprocedural optimization
@@ -328,14 +343,10 @@ All cached entries can be viewed using ``cmake -LAH`` from a build directory.
 
     Path to an ``sqlite3`` or ``sqlite3.exe`` executable.
 
-.. option:: SQLITE3_INCLUDE_DIR
-
-    Path to an include directory with the ``sqlite3.h`` header file.
-
-.. option:: SQLITE3_LIBRARY
-
-    Path to a shared or static library file, such as ``sqlite3.dll``,
-    ``libsqlite3.so``, ``sqlite3.lib`` or other name.
+.. deprecated:: 9.4.0
+    ``SQLITE3_INCLUDE_DIR`` and ``SQLITE3_LIBRARY`` should be replaced with
+    ``SQLite3_INCLUDE_DIR`` and ``SQLite3_LIBRARY``, respectively.
+    Users may also consider :option:`CMAKE_PREFIX_PATH` instead.
 
 .. option:: ENABLE_CURL=ON
 
